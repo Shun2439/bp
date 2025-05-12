@@ -57,6 +57,7 @@ dependencies = [
  "battery",
  "iron",
  "mime",
+ "rand",
  "router",
 ]
 

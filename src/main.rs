@@ -4,6 +4,8 @@ extern crate router;
 #[macro_use]
 extern crate mime;
 
+use rand::prelude::*;
+
 use iron::prelude::*;
 use iron::status;
 use iron::{AfterMiddleware, Chain, Iron, IronResult, Request, Response};
@@ -29,6 +31,22 @@ impl Luck {
             kyou: String::from("凶"),
         }
     }
+
+    fn random(&mut self) -> String {
+        let mut rng = thread_rng();
+
+        let choice = rng.gen_range(0, 6);
+
+        match choice {
+            0 => self.daikichi.clone(),
+            1 => self.chuukichi.clone(),
+            2 => self.kichi.clone(),
+            3 => self.shoukichi.clone(),
+            4 => self.suekichi.clone(),
+            5 => self.kyou.clone(),
+            _ => unreachable!("Error"),
+        }
+    }
 }
 
 struct Custom404;
@@ -46,9 +64,6 @@ impl AfterMiddleware for Custom404 {
 }
 
 fn main() {
-    let luck = Luck::new();
-    println!("{}", luck.daikichi);
-
     let mut router = Router::new();
     router.get("/", handler, "example");
 
@@ -60,13 +75,19 @@ fn main() {
 }
 
 fn handler(_: &mut Request) -> IronResult<Response> {
+    let mut luck = Luck::new();
+    let random_luck_value = luck.random();
+
     let mut response = Response::new();
     response.set_mut(status::Ok);
     response.set_mut(mime!(Text/Html; Charset=Utf8));
-    response.set_mut(
+    let html_content = format!(
         r#"
-                <h1> demo </h1>
+                <h1> おみくじ </h1>
+                今日の運勢は{}!
                 "#,
+        random_luck_value
     );
+    response.set_mut(html_content);
     Ok(response)
 }
