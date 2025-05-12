@@ -5,10 +5,13 @@ extern crate router;
 extern crate mime;
 
 use rand::prelude::*;
+use serde_json::json;
 
+use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status;
 use iron::{AfterMiddleware, Chain, Iron, IronResult, Request, Response};
+use iron_cors::CorsMiddleware;
 use router::{NoRoute, Router};
 
 struct Luck {
@@ -32,7 +35,7 @@ impl Luck {
         }
     }
 
-    fn random(&mut self) -> String {
+    fn random(&self) -> String {
         let mut rng = thread_rng();
 
         let choice = rng.gen_range(0, 6);
@@ -56,7 +59,15 @@ impl AfterMiddleware for Custom404 {
         println!("Hitting custom 404 middleware");
 
         if err.error.is::<NoRoute>() {
-            Ok(Response::with((status::NotFound, "Custom 404 response")))
+            let json_error = json!({
+                "error": "NotFound",
+                "message": "Therequested API endpoint does not exist."
+            });
+            let mut response = Response::with((status::NotFound, json_error.to_string()));
+            response
+                .headers
+                .set(ContentType(mime!(Application/Json; Charset=Utf8)));
+            Ok(response)
         } else {
             Err(err)
         }
@@ -65,29 +76,32 @@ impl AfterMiddleware for Custom404 {
 
 fn main() {
     let mut router = Router::new();
-    router.get("/", handler, "example");
+    router.get("/api/luck", handler, "get_luck");
+
+    let cors_middleware = CorsMiddleware::with_allow_any();
 
     let mut chain = Chain::new(router);
+    chain.link_around(cors_middleware);
     chain.link_after(Custom404);
 
     println!("Start server!");
+    println!("Starting server on https://localhost:3000");
     Iron::new(chain).http("localhost:3000").unwrap();
 }
 
 fn handler(_: &mut Request) -> IronResult<Response> {
-    let mut luck = Luck::new();
+    let luck = Luck::new();
     let random_luck_value = luck.random();
+
+    let json_response_body = json!({
+        "luck": random_luck_value
+    });
 
     let mut response = Response::new();
     response.set_mut(status::Ok);
-    response.set_mut(mime!(Text/Html; Charset=Utf8));
-    let html_content = format!(
-        r#"
-                <h1> おみくじ </h1>
-                今日の運勢は{}!
-                "#,
-        random_luck_value
-    );
-    response.set_mut(html_content);
+    response
+        .headers
+        .set(ContentType(mime!(Application/Json; Charset=Utf8)));
+    response.set_mut(json_response_body.to_string());
     Ok(response)
 }
